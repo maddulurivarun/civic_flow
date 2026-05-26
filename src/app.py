@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import subprocess
+import sys
 import joblib
 
 st.set_page_config(page_title="CivicFlow Transit Control Center", layout="wide")
@@ -9,15 +10,16 @@ st.set_page_config(page_title="CivicFlow Transit Control Center", layout="wide")
 st.title("🏙️ CivicFlow: Smart City Mobility & Grid Optimizer")
 st.markdown("Real-time optimization engine for electric vehicle infrastructure and public transit micro-routing.")
 
-# Resiliency Check: If data or model doesn't exist in the cloud environment, auto-run the backend pipeline
+# Create missing data paths immediately
+os.makedirs("data/raw", exist_ok=True)
+os.makedirs("data/processed", exist_ok=True)
+
+# Explicitly use sys.executable to run scripts in the correct cloud venv environment
 if not os.path.exists("data/raw/ev_stations.csv") or not os.path.exists("src/demand_model.pkl"):
-    with st.spinner("Initializing system datasets and training ML optimization engine in cloud container..."):
-        os.makedirs("data/raw", exist_ok=True)
-        os.makedirs("data/processed", exist_ok=True)
-        # Run scripts in sequence to build the environment artifacts
-        subprocess.run(["python", "src/ingest.py"])
-        subprocess.run(["python", "src/preprocess.py"])
-        subprocess.run(["python", "src/model.py"])
+    with st.spinner("Initializing cloud datasets and training ML engine (this may take up to 30 seconds)..."):
+        subprocess.run([sys.executable, "src/ingest.py"])
+        subprocess.run([sys.executable, "src/preprocess.py"])
+        subprocess.run([sys.executable, "src/model.py"])
 
 @st.cache_data
 def get_data():
