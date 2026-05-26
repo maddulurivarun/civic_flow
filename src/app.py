@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-import folium
-from streamlit_folium import st_folium
+import os
+import subprocess
 import joblib
 
 st.set_page_config(page_title="CivicFlow Transit Control Center", layout="wide")
@@ -9,7 +9,16 @@ st.set_page_config(page_title="CivicFlow Transit Control Center", layout="wide")
 st.title("🏙️ CivicFlow: Smart City Mobility & Grid Optimizer")
 st.markdown("Real-time optimization engine for electric vehicle infrastructure and public transit micro-routing.")
 
-# Load data and artifacts
+# Resiliency Check: If data or model doesn't exist in the cloud environment, auto-run the backend pipeline
+if not os.path.exists("data/raw/ev_stations.csv") or not os.path.exists("src/demand_model.pkl"):
+    with st.spinner("Initializing system datasets and training ML optimization engine in cloud container..."):
+        os.makedirs("data/raw", exist_ok=True)
+        os.makedirs("data/processed", exist_ok=True)
+        # Run scripts in sequence to build the environment artifacts
+        subprocess.run(["python", "src/ingest.py"])
+        subprocess.run(["python", "src/preprocess.py"])
+        subprocess.run(["python", "src/model.py"])
+
 @st.cache_data
 def get_data():
     stations = pd.read_csv("data/raw/ev_stations.csv")
@@ -17,12 +26,7 @@ def get_data():
     return stations, telemetry
 
 df_stations, df_telemetry = get_data()
-
-try:
-    model = joblib.load("src/demand_model.pkl")
-except:
-    st.error("Model file not found. Please run 'python src/model.py' first.")
-    st.stop()
+model = joblib.load("src/demand_model.pkl")
 
 # Layout Columns
 col1, col2 = st.columns([1, 2])
@@ -30,10 +34,9 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.header("⚡ Grid Analytics & Pricing")
     
-    # Calculate Live Surge Multipliers using our model
     latest_step = df_telemetry['step'].max()
     live_df = df_telemetry[df_telemetry['step'] == latest_step].copy()
-    live_df['hour'] = 12 # Simulating midday peak
+    live_df['hour'] = 12
     live_df['station_numeric'] = live_df['station_id'].astype('category').cat.codes
     
     X_live = live_df[['step', 'hour', 'station_numeric', 'passenger_count']]
@@ -52,12 +55,9 @@ with col1:
 
 with col2:
     st.header("🗺️ Live Dispatch Map")
-    # Read the pre-compiled HTML map we generated in preprocess.py
     try:
         with open("data/processed/city_map.html", "r", encoding="utf-8") as f:
             html_map = f.read()
         st.components.v1.html(html_map, height=500)
     except:
-        st.info("Run preprocessing to see the map or check file paths.")
-
-st.success("CivicFlow Backend Core: Online & Optimizing.")
+        st.info("Generating map layer coordinates...")
